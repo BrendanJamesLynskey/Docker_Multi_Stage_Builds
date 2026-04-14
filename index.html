@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Docker Multi-Stage Builds</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.6.1/reveal.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.6.1/theme/black.min.css">
+<style>
+  :root { --amber:#f5a623; --green:#4ecb8d; --purple:#a78bfa; --blue:#60a5fa; --red:#f87171; --bg:#0a0a0f; --bg2:#10101a; --bg3:#181824; --border:#2a2a3a; --text:#e8e8f0; --muted:#8888a8; }
+  .reveal-viewport { background: var(--bg); }
+  .reveal .slides section { background: transparent; }
+  .reveal { font-family: 'DM Sans', sans-serif; color: var(--text); }
+  .reveal h1,.reveal h2,.reveal h3 { font-family: 'Playfair Display', serif; font-weight: 700; }
+  .reveal h1 { font-size: 1.6em; color: var(--amber); line-height: 1.1; }
+  .reveal h2 { font-size: 1.1em; color: var(--amber); margin-bottom: .2em; }
+  .reveal h3 { font-size: .78em; color: var(--green); margin-bottom: .15em; }
+  .reveal p { font-size: .56em; line-height: 1.45; color: var(--text); }
+  .reveal li { font-size: .54em; line-height: 1.45; margin-bottom: .1em; }
+  .reveal code { font-family: 'JetBrains Mono', monospace; font-size: .72em; }
+  .reveal pre { box-shadow: none; background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: .3em .5em; margin: .25em 0; }
+  .reveal pre code { font-size: .52em; line-height: 1.35; background: transparent; color: #cdd6f4; }
+  .slide-hdr { display: flex; align-items: center; gap: .4em; border-bottom: 1px solid var(--border); padding-bottom: .2em; margin-bottom: .3em; }
+  .slide-hdr .tag { font-family: 'JetBrains Mono', monospace; font-size: .42em; font-weight: 500; color: var(--bg); background: var(--amber); padding: .1em .4em; border-radius: 3px; letter-spacing: .04em; }
+  .slide-hdr h2 { margin: 0; font-size: .95em; }
+  .cols { display: grid; gap: .5em; } .cols-2 { grid-template-columns: 1fr 1fr; } .cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .card { background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: .35em .6em; }
+  .card.amber { border-left: 3px solid var(--amber); } .card.green { border-left: 3px solid var(--green); }
+  .card.purple { border-left: 3px solid var(--purple); } .card.blue { border-left: 3px solid var(--blue); }
+  .card.red { border-left: 3px solid var(--red); }
+  .card h3 { font-size: .64em; margin: 0 0 .12em; } .card p { font-size: .52em; margin: 0; color: #b8b8d0; }
+  .card ul { margin: 0; padding-left: 1em; } .card li { font-size: .52em; color: #b8b8d0; margin-bottom: .02em; }
+  .reveal table { width: 100%; border-collapse: collapse; font-size: .5em; }
+  .reveal table th { background: var(--bg3); color: var(--amber); font-weight: 600; padding: .2em .4em; border: 1px solid var(--border); text-align: left; }
+  .reveal table td { padding: .18em .4em; border: 1px solid var(--border); color: #ccc; }
+  .reveal table tr:nth-child(even) td { background: #0e0e18; }
+  .a { color: var(--amber); font-weight: 600; } .g { color: var(--green); font-weight: 600; }
+  .p { color: var(--purple); font-weight: 600; } .b { color: var(--blue); font-weight: 600; }
+  .r { color: var(--red); font-weight: 600; } .mono { font-family: 'JetBrains Mono', monospace; }
+  .pill { display: inline-block; font-family: 'JetBrains Mono', monospace; font-size: .44em; padding: .08em .4em; border-radius: 99px; border: 1px solid; margin: 0 .08em; }
+  .pill.amber { color: var(--amber); border-color: var(--amber); } .pill.green { color: var(--green); border-color: var(--green); }
+  .pill.purple { color: var(--purple); border-color: var(--purple); } .pill.blue { color: var(--blue); border-color: var(--blue); }
+  .reveal .slide-footer { display: none; }
+  .title-slide h1 { font-size: 1.8em; }
+  .title-slide .subtitle { font-size: .7em; color: var(--green); font-family: 'DM Sans', sans-serif; font-weight: 300; letter-spacing: .04em; margin: .3em 0 .6em; }
+  .title-slide .meta { font-size: .48em; color: var(--muted); font-family: 'JetBrains Mono', monospace; }
+  .ss-row { display: flex; gap: .25em; align-items: center; margin: .1em 0; font-size: .55em; font-family: 'JetBrains Mono', monospace; }
+  .ss-node { padding: .2em .55em; border-radius: 5px; font-size: .9em; background: var(--bg3); border: 1px solid var(--border); color: var(--text); }
+  .ss-node.active { background: #1a2a1a; border-color: var(--green); color: var(--green); }
+  .ss-node.done { background: #1a1a2a; border-color: var(--purple); color: var(--purple); }
+  .ss-arrow { color: var(--amber); }
+  .reveal ul, .reveal ol { margin: .15em 0 .15em 1em; }
+  .reveal .slides > section { display: flex !important; flex-direction: column !important; overflow-y: auto !important; align-items: stretch !important; justify-content: flex-start !important; }
+</style>
+</head>
+<body>
+<div class="reveal"><div class="slides">
+
+<!-- ============ SLIDE 1 — TITLE ============ -->
+<section class="title-slide">
+  <h1>Docker Multi-Stage Builds</h1>
+  <p class="subtitle">Smaller images, faster deployments, cleaner pipelines</p>
+  <div style="margin:.5em 0">
+    <span class="pill amber">Multi-Stage</span>
+    <span class="pill green">BuildKit</span>
+    <span class="pill purple">Optimization</span>
+    <span class="pill blue">Images</span>
+  </div>
+  <p class="meta">2026 &middot; Brendan Lynskey</p>
+</section>
+
+<!-- ============ SLIDE 2 — WHY IMAGE SIZE MATTERS ============ -->
+<section>
+  <div class="slide-hdr"><span class="tag">01</span><h2>Why Image Size Matters</h2></div>
+  <div class="cols cols-3">
+    <div class="card amber">
+      <h3>Security</h3>
+      <ul>
+        <li>Fewer packages = smaller attack surface</li>
+        <li>No compilers or dev tools in production</li>
+        <li>Fewer CVEs to patch</li>
+      </ul>
+    </div>
+    <div class="card green">
+      <h3>Performance</h3>
+      <ul>
+        <li>Faster image pulls &amp; pushes</li>
+        <li>Quicker container start-up</li>
+        <li>Lower registry storage costs</li>
+      </ul>
+    </div>
+    <div class="card purple">
+      <h3>Operations</h3>
+      <ul>
+        <li>Faster CI/CD pipelines</li>
+        <li>Less bandwidth on deploy</li>
+        <li>Easier to audit and scan</li>
+      </ul>
+    </div>
+  </div>
+  <p style="margin-top:.3em">A typical <span class="a">Node.js</span> app image can drop from <span class="r">1.2 GB</span> to <span class="g">80 MB</span> with multi-stage builds and the right base image.</p>
+</section>
+
+<!-- ============ SLIDE 3 — SINGLE-STAGE vs MULTI-STAGE ============ -->
+<section>
+  <div class="slide-hdr"><span class="tag">02</span><h2>Single-Stage vs Multi-Stage</h2></div>
+  <div class="cols cols-2">
+    <div class="card red">
+      <h3>Single-Stage (the problem)</h3>
+<pre><code class="dockerfile"># Everything in one image
+FROM node:20
+WORKDIR /app
+COPY . .
+RUN npm ci &amp;&amp; npm run build
+EXPOSE 3000
+CMD ["node", "dist/server.js"]
+# Result: ~1.1 GB image with
+# build tools, node_modules, src...</code></pre>
+    </div>
+    <div class="card green">
+      <h3>Multi-Stage (the solution)</h3>
+<pre><code class="dockerfile"># Stage 1: build
+FROM node:20 AS build
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+# Stage 2: production
+FROM node:20-slim
+WORKDIR /app
+COPY --from=build /app/dist ./dist
+CMD ["node", "dist/server.js"]
+# Result: ~180 MB image, production only</code></pre>
+    </div>
+  </div>
+  <p>Multi-stage builds let you use <span class="a">multiple FROM statements</span> &mdash; only the final stage becomes the shipped image.</p>
+</section>
+
+<!-- ============ SLIDE 4 — FROM ... AS SYNTAX ============ -->
+<section>
+  <div class="slide-hdr"><span class="tag">03</span><h2>FROM ... AS Syntax</h2></div>
+  <p>Each <code>FROM</code> instruction starts a <span class="a">new build stage</span>. Name stages with <code>AS</code> for clarity.</p>
+<pre><code class="dockerfile"># Named stages make Dockerfiles readable and maintainable
+FROM golang:1.22 AS builder        # Stage 0 - named "builder"
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 go build -o /app ./cmd/server
+
+FROM alpine:3.19 AS certs          # Stage 1 - named "certs"
+RUN apk add --no-cache ca-certificates
+
+FROM scratch AS runtime             # Stage 2 - named "runtime" (final)
+COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=builder /app /app
+ENTRYPOINT ["/app"]</code></pre>
+  <div class="cols cols-3" style="margin-top:.3em">
+    <div class="card amber"><h3>Named Stages</h3><p>Use descriptive names: <code>builder</code>, <code>deps</code>, <code>runtime</code></p></div>
+    <div class="card green"><h3>Numbered Stages</h3><p><code>COPY --from=0</code> works but is fragile</p></div>
+    <div class="card purple"><h3>External Images</h3><p><code>COPY --from=nginx:alpine</code> pulls from any image</p></div>
+  </div>
+</section>
+
+<!-- ============ SLIDE 5 — COPY --from BETWEEN STAGES ============ -->
+<section>
+  <div class="slide-hdr"><span class="tag">04</span><h2>COPY --from Between Stages</h2></div>
+  <p><code>COPY --from</code> is the bridge between stages &mdash; selectively copy only what you need.</p>
+  <div class="cols cols-2">
+    <div class="card blue">
+      <h3>From a Named Stage</h3>
+<pre><code class="dockerfile">COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/package.json .
+COPY --from=deps /app/node_modules ./node_modules</code></pre>
+    </div>
+    <div class="card purple">
+      <h3>From an External Image</h3>
+<pre><code class="dockerfile"># Grab a binary from another image
+COPY --from=busybox:uclibc /bin/sh /bin/sh
+COPY --from=redis:7 /usr/local/bin/redis-cli /usr/local/bin/</code></pre>
+    </div>
+  </div>
+  <div class="card amber" style="margin-top:.3em">
+    <h3>Key Rules</h3>
+    <ul>
+      <li>Only <span class="a">files &amp; directories</span> are copied &mdash; not ENV, USER, or WORKDIR settings</li>
+      <li>Ownership resets to <code>root:root</code> &mdash; use <code>COPY --from=build --chown=app:app</code> to fix</li>
+      <li>Symlinks are followed and resolved during copy</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ SLIDE 6 — BUILDING FOR DIFFERENT ENVIRONMENTS ============ -->
+<section>
+  <div class="slide-hdr"><span class="tag">05</span><h2>Building for Different Environments</h2></div>
+  <p>Use <code>--target</code> to stop at a specific stage &mdash; one Dockerfile, multiple outputs.</p>
+<pre><code class="dockerfile">FROM node:20 AS base
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+
+FROM base AS dev                   # docker build --target dev
+COPY . .
+CMD ["npm", "run", "dev"]          # Hot reload, debug tools
+
+FROM base AS test                  # docker build --target test
+COPY . .
+RUN npm run lint &amp;&amp; npm test
+
+FROM base AS build
+COPY . .
+RUN npm run build
+
+FROM node:20-slim AS prod          # docker build --target prod (default)
+WORKDIR /app
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/node_modules ./node_modules
+USER node
+CMD ["node", "dist/server.js"]</code></pre>
+  <div class="ss-row" style="margin-top:.2em">
+    <span class="ss-node done">base</span><span class="ss-arrow">&#8594;</span>
+    <span class="ss-node">dev</span><span class="ss-arrow">|</span>
+    <span class="ss-node">test</span><span class="ss-arrow">|</span>
+    <span class="ss-node done">build</span><span class="ss-arrow">&#8594;</span>
+    <span class="ss-node active">prod</span>
+  </div>
+</section>
+
+<!-- ============ SLIDE 7 — GO PATTERN ============ -->
+<section>
+  <div class="slide-hdr"><span class="tag">06</span><h2>Language Pattern: Go</h2></div>
+  <p>Go compiles to a <span class="a">static binary</span> &mdash; the ideal multi-stage candidate. Final image can be <span class="g">scratch</span>.</p>
+<pre><code class="dockerfile">FROM golang:1.22-alpine AS builder
+RUN apk add --no-cache git ca-certificates
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -ldflags="-s -w" -o /bin/server ./cmd/server
+
+FROM scratch
+COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=builder /bin/server /server
+EXPOSE 8080
+ENTRYPOINT ["/server"]</code></pre>
+  <div class="cols cols-3" style="margin-top:.2em">
+    <div class="card green"><h3>Build Stage</h3><p>~800 MB (Go SDK + deps)</p></div>
+    <div class="card amber"><h3>Final Image</h3><p>~8 MB (static binary + certs)</p></div>
+    <div class="card purple"><h3>Savings</h3><p>~99% size reduction</p></div>
+  </div>
+</section>
+
+<!-- ============ SLIDE 8 — JAVA & PYTHON PATTERNS ============ -->
+<section>
+  <div class="slide-hdr"><span class="tag">07</span><h2>Language Patterns: Java &amp; Python</h2></div>
+  <div class="cols cols-2">
+    <div class="card amber">
+      <h3>Java (Maven + JRE)</h3>
+<pre><code class="dockerfile">FROM maven:3.9-eclipse-temurin-21 AS build
+WORKDIR /app
+COPY pom.xml .
+RUN mvn dependency:go-offline
+COPY src ./src
+RUN mvn package -DskipTests
+
+FROM eclipse-temurin:21-jre-alpine
+COPY --from=build /app/target/*.jar /app.jar
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "/app.jar"]
+# JDK build: ~700MB -> JRE runtime: ~190MB</code></pre>
+    </div>
+    <div class="card blue">
+      <h3>Python (pip + slim)</h3>
+<pre><code class="dockerfile">FROM python:3.12 AS builder
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --user --no-cache-dir \
+    -r requirements.txt
+
+FROM python:3.12-slim
+WORKDIR /app
+COPY --from=builder /root/.local /root/.local
+COPY . .
+ENV PATH=/root/.local/bin:$PATH
+CMD ["python", "app.py"]
+# Full Python: ~1GB -> Slim: ~150MB</code></pre>
+    </div>
+  </div>
+  <p><span class="p">Tip:</span> For Java, use <code>jlink</code> to create a custom JRE and shrink the runtime further.</p>
+</section>
+
+<!-- ============ SLIDE 9 — NODE.JS & RUST PATTERNS ============ -->
+<section>
+  <div class="slide-hdr"><span class="tag">08</span><h2>Language Patterns: Node.js &amp; Rust</h2></div>
+  <div class="cols cols-2">
+    <div class="card green">
+      <h3>Node.js (production deps only)</h3>
+<pre><code class="dockerfile">FROM node:20-alpine AS deps
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --omit=dev
+
+FROM node:20-alpine AS build
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM gcr.io/distroless/nodejs20
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
+CMD ["dist/server.js"]
+# node:20 ~1.1GB -> distroless ~130MB</code></pre>
+    </div>
+    <div class="card purple">
+      <h3>Rust (static musl binary)</h3>
+<pre><code class="dockerfile">FROM rust:1.77 AS builder
+RUN rustup target add x86_64-unknown-linux-musl
+WORKDIR /app
+COPY Cargo.toml Cargo.lock ./
+RUN mkdir src &amp;&amp; echo "fn main(){}" > src/main.rs
+RUN cargo build --release \
+    --target x86_64-unknown-linux-musl
+COPY src ./src
+RUN touch src/main.rs &amp;&amp; \
+    cargo build --release \
+    --target x86_64-unknown-linux-musl
+
+FROM scratch
+COPY --from=builder \
+  /app/target/x86_64-unknown-linux-musl/release/app /
+ENTRYPOINT ["/app"]
+# rust:1.77 ~1.5GB -> scratch ~5MB</code></pre>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SLIDE 10 — DISTROLESS & SCRATCH ============ -->
+<section>
+  <div class="slide-hdr"><span class="tag">09</span><h2>Distroless &amp; Scratch Images</h2></div>
+  <p>The final base image determines your <span class="a">security posture</span> and <span class="g">image size</span>.</p>
+  <table>
+    <tr><th>Base Image</th><th>Size</th><th>Shell?</th><th>Package Mgr?</th><th>Best For</th></tr>
+    <tr><td><code>ubuntu:24.04</code></td><td>~78 MB</td><td class="g">Yes</td><td class="g">apt</td><td>General purpose, debugging</td></tr>
+    <tr><td><code>alpine:3.19</code></td><td>~7 MB</td><td class="g">Yes</td><td class="g">apk</td><td>Small images with shell access</td></tr>
+    <tr><td><code>distroless/static</code></td><td>~2 MB</td><td class="r">No</td><td class="r">No</td><td>Go, Rust, static binaries</td></tr>
+    <tr><td><code>distroless/cc</code></td><td>~5 MB</td><td class="r">No</td><td class="r">No</td><td>C/C++ apps needing libc</td></tr>
+    <tr><td><code>distroless/nodejs20</code></td><td>~130 MB</td><td class="r">No</td><td class="r">No</td><td>Node.js production</td></tr>
+    <tr><td><code>scratch</code></td><td><span class="g">0 bytes</span></td><td class="r">No</td><td class="r">No</td><td>Truly static binaries only</td></tr>
+  </table>
+  <div class="card amber" style="margin-top:.3em">
+    <h3>Distroless Advantage</h3>
+    <p>No shell means attackers cannot <code>exec</code> into the container. No package manager means no install-time exploits. Use <code>debug</code> variants (e.g., <code>distroless/static:debug</code>) only in development.</p>
+  </div>
+</section>
+
+<!-- ============ SLIDE 11 — BUILD CACHE OPTIMIZATION ============ -->
+<section>
+  <div class="slide-hdr"><span class="tag">10</span><h2>Build Cache Optimization</h2></div>
+  <p>Docker caches each layer. <span class="a">Order matters</span> &mdash; put things that change least at the top.</p>
+  <div class="cols cols-2">
+    <div class="card red">
+      <h3>Cache-Busting Order</h3>
+<pre><code class="dockerfile"># BAD: COPY . . invalidates everything
+FROM node:20
+WORKDIR /app
+COPY . .                # Any change busts cache
+RUN npm ci              # Always re-runs
+RUN npm run build       # Always re-runs</code></pre>
+    </div>
+    <div class="card green">
+      <h3>Cache-Friendly Order</h3>
+<pre><code class="dockerfile"># GOOD: deps cached until lockfile changes
+FROM node:20
+WORKDIR /app
+COPY package*.json ./   # Changes rarely
+RUN npm ci              # Cached if lock unchanged
+COPY . .                # Only source changes
+RUN npm run build       # Rebuilds only app</code></pre>
+    </div>
+  </div>
+  <div class="card blue" style="margin-top:.3em">
+    <h3>Layer Ordering Best Practices</h3>
+    <ul>
+      <li><span class="a">1.</span> System packages and dependencies (change rarely)</li>
+      <li><span class="a">2.</span> Language dependency files (<code>package.json</code>, <code>go.mod</code>, <code>requirements.txt</code>)</li>
+      <li><span class="a">3.</span> Install dependencies (<code>npm ci</code>, <code>go mod download</code>, <code>pip install</code>)</li>
+      <li><span class="a">4.</span> Application source code (changes often)</li>
+      <li><span class="a">5.</span> Build commands (<code>npm run build</code>, <code>go build</code>)</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ SLIDE 12 — ARG & CONDITIONAL STAGES ============ -->
+<section>
+  <div class="slide-hdr"><span class="tag">11</span><h2>ARG &amp; Conditional Stages</h2></div>
+  <p>Use <code>ARG</code> to parameterize builds and select stages dynamically.</p>
+<pre><code class="dockerfile"># Global ARG (available to all FROM instructions)
+ARG GO_VERSION=1.22
+ARG TARGET_ENV=prod
+
+FROM golang:${GO_VERSION} AS builder
+ARG TARGET_ENV
+WORKDIR /src
+COPY . .
+RUN if [ "$TARGET_ENV" = "dev" ]; then \
+      go build -gcflags="all=-N -l" -o /app .; \
+    else \
+      go build -ldflags="-s -w" -o /app .; \
+    fi
+
+FROM alpine:3.19 AS dev
+COPY --from=builder /app /app
+RUN apk add --no-cache curl jq  # debug tools
+CMD ["/app"]
+
+FROM scratch AS prod
+COPY --from=builder /app /app
+ENTRYPOINT ["/app"]</code></pre>
+  <div class="cols cols-2" style="margin-top:.2em">
+    <div class="card amber">
+      <h3>Build-time Selection</h3>
+<pre><code class="bash">docker build --build-arg TARGET_ENV=dev \
+             --target dev -t myapp:dev .</code></pre>
+    </div>
+    <div class="card green">
+      <h3>Version Pinning</h3>
+<pre><code class="bash">docker build --build-arg GO_VERSION=1.21 \
+             -t myapp:go1.21 .</code></pre>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SLIDE 13 — BUILDKIT FEATURES ============ -->
+<section>
+  <div class="slide-hdr"><span class="tag">12</span><h2>BuildKit Features</h2></div>
+  <p>Enable with <code>DOCKER_BUILDKIT=1</code> or use <code>docker buildx</code>. BuildKit unlocks powerful caching and secret handling.</p>
+  <div class="cols cols-2">
+    <div class="card amber">
+      <h3>Cache Mounts</h3>
+<pre><code class="dockerfile"># syntax=docker/dockerfile:1
+FROM golang:1.22 AS builder
+WORKDIR /src
+COPY . .
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go build -o /app .
+
+# Python pip cache
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r requirements.txt</code></pre>
+    </div>
+    <div class="card purple">
+      <h3>Build Secrets</h3>
+<pre><code class="dockerfile"># syntax=docker/dockerfile:1
+FROM node:20 AS build
+WORKDIR /app
+COPY . .
+# Secret never stored in image layers
+RUN --mount=type=secret,id=npmrc,target=/app/.npmrc \
+    npm ci
+
+# Build command:
+# docker build --secret id=npmrc,src=.npmrc .</code></pre>
+    </div>
+  </div>
+  <div class="card blue" style="margin-top:.3em">
+    <h3>More BuildKit Powers</h3>
+    <ul>
+      <li><span class="a">SSH forwarding:</span> <code>RUN --mount=type=ssh git clone ...</code> &mdash; forward agent without copying keys</li>
+      <li><span class="g">Bind mounts:</span> <code>RUN --mount=type=bind,from=stage,source=/data,target=/mnt</code> &mdash; read without copy</li>
+      <li><span class="p">Parallel builds:</span> Independent stages build concurrently &mdash; massive speed gains</li>
+      <li><span class="b">Inline cache:</span> <code>--build-arg BUILDKIT_INLINE_CACHE=1</code> embeds cache metadata in the image</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ SLIDE 14 — IMAGE SIZE COMPARISON ============ -->
+<section>
+  <div class="slide-hdr"><span class="tag">13</span><h2>Image Size Comparison</h2></div>
+  <p>Real-world impact of multi-stage builds across languages:</p>
+  <table>
+    <tr><th>Language</th><th>Single-Stage</th><th>Multi-Stage</th><th>+ Distroless/Scratch</th><th>Reduction</th></tr>
+    <tr><td><span class="b">Go</span> (REST API)</td><td>850 MB</td><td>15 MB (alpine)</td><td><span class="g">8 MB</span> (scratch)</td><td class="g">99%</td></tr>
+    <tr><td><span class="g">Node.js</span> (Express)</td><td>1.1 GB</td><td>250 MB (slim)</td><td><span class="g">130 MB</span> (distroless)</td><td class="g">88%</td></tr>
+    <tr><td><span class="a">Java</span> (Spring Boot)</td><td>700 MB</td><td>300 MB (JRE)</td><td><span class="g">190 MB</span> (JRE-alpine)</td><td class="g">73%</td></tr>
+    <tr><td><span class="p">Python</span> (Flask)</td><td>1.0 GB</td><td>180 MB (slim)</td><td><span class="g">150 MB</span> (slim+cleanup)</td><td class="g">85%</td></tr>
+    <tr><td><span class="r">Rust</span> (Actix)</td><td>1.5 GB</td><td>12 MB (alpine)</td><td><span class="g">5 MB</span> (scratch)</td><td class="g">99.7%</td></tr>
+  </table>
+  <div class="card green" style="margin-top:.3em">
+    <h3>The Pattern</h3>
+    <p>Compiled languages (Go, Rust) see the biggest gains because the entire toolchain is excluded. Interpreted languages (Python, Node.js) still benefit significantly by removing dev dependencies and build artifacts.</p>
+  </div>
+</section>
+
+<!-- ============ SLIDE 15 — .dockerignore BEST PRACTICES ============ -->
+<section>
+  <div class="slide-hdr"><span class="tag">14</span><h2>.dockerignore Best Practices</h2></div>
+  <p>A good <code>.dockerignore</code> is the <span class="a">first line of defence</span> &mdash; it shrinks your build context before any stage runs.</p>
+  <div class="cols cols-2">
+    <div class="card amber">
+      <h3>Comprehensive .dockerignore</h3>
+<pre><code class="plaintext"># Version control
+.git
+.gitignore
+
+# Dependencies (rebuilt in image)
+node_modules
+vendor
+__pycache__
+*.pyc
+
+# Build outputs (rebuilt in image)
+dist
+build
+target
+
+# IDE &amp; editor
+.vscode
+.idea
+*.swp
+
+# Environment &amp; secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Docker files (avoid recursion)
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Documentation &amp; CI
+README.md
+docs/
+.github/
+.gitlab-ci.yml</code></pre>
+    </div>
+    <div class="card blue">
+      <h3>Why It Matters</h3>
+      <ul>
+        <li><span class="a">Speed:</span> Less data sent to Docker daemon</li>
+        <li><span class="g">Security:</span> Secrets never enter the build context</li>
+        <li><span class="p">Caching:</span> Irrelevant file changes do not bust cache</li>
+        <li><span class="b">Size:</span> <code>.git</code> alone can be hundreds of MB</li>
+      </ul>
+      <h3 style="margin-top:.3em">Pro Tips</h3>
+      <ul>
+        <li>Use <code>!</code> for exceptions: <code>!src/</code> allows only src</li>
+        <li>Place more specific rules <em>after</em> general ones</li>
+        <li>Test with <code>docker build --no-cache</code> to verify</li>
+        <li>BuildKit supports <code>.dockerignore</code> per Dockerfile:<br/><code>Dockerfile.dev.dockerignore</code></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SLIDE 16 — CI/CD INTEGRATION ============ -->
+<section>
+  <div class="slide-hdr"><span class="tag">15</span><h2>CI/CD Integration with Multi-Stage</h2></div>
+  <p>Multi-stage builds simplify CI pipelines &mdash; the Dockerfile <em>is</em> the build script.</p>
+  <div class="cols cols-2">
+    <div class="card green">
+      <h3>GitHub Actions Example</h3>
+<pre><code class="yaml">name: Build &amp; Push
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v5
+        with:
+          context: .
+          target: prod
+          push: true
+          tags: ghcr.io/org/app:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max</code></pre>
+    </div>
+    <div class="card purple">
+      <h3>Multi-Target Pipeline</h3>
+<pre><code class="yaml"># Run tests in Docker, then build prod
+jobs:
+  test:
+    steps:
+      - run: |
+          docker build --target test \
+            -t myapp:test .
+          docker run myapp:test
+
+  deploy:
+    needs: test
+    steps:
+      - run: |
+          docker build --target prod \
+            -t myapp:prod .
+          docker push myapp:prod</code></pre>
+    </div>
+  </div>
+  <div class="card amber" style="margin-top:.3em">
+    <h3>CI Cache Strategies</h3>
+    <ul>
+      <li><span class="a">GitHub Actions:</span> <code>cache-from: type=gha</code> uses GHA cache backend</li>
+      <li><span class="g">Registry cache:</span> <code>cache-from: type=registry,ref=myapp:cache</code></li>
+      <li><span class="p">Local cache:</span> <code>cache-from: type=local,src=/tmp/.buildx-cache</code></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ SLIDE 17 — DEBUGGING INTERMEDIATE STAGES ============ -->
+<section>
+  <div class="slide-hdr"><span class="tag">16</span><h2>Debugging Intermediate Stages</h2></div>
+  <p>When builds fail, you need to inspect what happened <span class="a">inside</span> a stage.</p>
+  <div class="cols cols-2">
+    <div class="card blue">
+      <h3>Build &amp; Stop at a Stage</h3>
+<pre><code class="bash"># Stop at the builder stage
+docker build --target builder -t debug:builder .
+
+# Shell into it
+docker run -it debug:builder /bin/sh
+
+# List what was built
+docker run debug:builder ls -la /app/dist
+
+# Check file sizes
+docker run debug:builder du -sh /app/*</code></pre>
+    </div>
+    <div class="card amber">
+      <h3>Inspect Image Layers</h3>
+<pre><code class="bash"># See layer sizes and commands
+docker history myapp:latest
+
+# Dive tool: interactive layer explorer
+dive myapp:latest
+
+# Export filesystem for inspection
+docker create --name tmp myapp:latest
+docker export tmp | tar tf - | head -50
+docker rm tmp</code></pre>
+    </div>
+  </div>
+  <div class="card green" style="margin-top:.3em">
+    <h3>BuildKit Debug Tricks</h3>
+    <ul>
+      <li><span class="a">Verbose output:</span> <code>docker build --progress=plain .</code> shows full build logs</li>
+      <li><span class="g">Print in build:</span> Add <code>RUN ls -la /app &amp;&amp; cat /app/config.json</code> temporarily</li>
+      <li><span class="p">Debug image:</span> Use <code>distroless/static:debug</code> for a busybox shell in distroless</li>
+      <li><span class="b">Buildx inspect:</span> <code>docker buildx du</code> shows cache usage</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ SLIDE 18 — PRODUCTION DOCKERFILE WALKTHROUGH ============ -->
+<section>
+  <div class="slide-hdr"><span class="tag">17</span><h2>Production Dockerfile Walkthrough</h2></div>
+  <p>A complete, production-ready Node.js Dockerfile using every technique covered:</p>
+<pre><code class="dockerfile"># syntax=docker/dockerfile:1
+ARG NODE_VERSION=20
+
+# --- Stage 1: Dependencies ---
+FROM node:${NODE_VERSION}-alpine AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --omit=dev
+
+# --- Stage 2: Build ---
+FROM node:${NODE_VERSION}-alpine AS build
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci
+COPY tsconfig.json ./
+COPY src ./src
+RUN npm run build &amp;&amp; npm prune --omit=dev
+
+# --- Stage 3: Production ---
+FROM gcr.io/distroless/nodejs${NODE_VERSION}-debian12
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY --from=build /app/dist ./dist
+ENV NODE_ENV=production
+EXPOSE 3000
+USER nonroot:nonroot
+CMD ["dist/server.js"]</code></pre>
+  <div class="cols cols-2" style="margin-top:.2em">
+    <div class="card green"><h3>What We Achieved</h3>
+      <ul><li>BuildKit cache mounts</li><li>Separate dep &amp; build stages</li><li>Distroless final image</li><li>Non-root user</li></ul>
+    </div>
+    <div class="card amber"><h3>Results</h3>
+      <ul><li>~130 MB final image</li><li>No shell, no pkg manager</li><li>Cached deps rebuild in seconds</li><li>One file: dev, test, prod</li></ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SLIDE 19 — SUMMARY & FURTHER READING ============ -->
+<section>
+  <div class="slide-hdr"><span class="tag">18</span><h2>Summary &amp; Further Reading</h2></div>
+  <div class="cols cols-2">
+    <div class="card green">
+      <h3>Key Takeaways</h3>
+      <ul>
+        <li>Use <span class="a">named stages</span> (<code>FROM ... AS</code>) for clarity</li>
+        <li><span class="g">COPY --from</span> only what your runtime needs</li>
+        <li>Order layers from <span class="p">least to most</span> frequently changing</li>
+        <li>Choose the <span class="b">smallest viable base</span> (scratch &gt; distroless &gt; alpine &gt; slim)</li>
+        <li>Enable <span class="a">BuildKit</span> for cache mounts, secrets, and parallelism</li>
+        <li>Use <code>--target</code> for <span class="g">dev/test/prod</span> from one Dockerfile</li>
+        <li>Always maintain a thorough <code>.dockerignore</code></li>
+      </ul>
+    </div>
+    <div class="card blue">
+      <h3>Further Reading</h3>
+      <ul>
+        <li><a href="https://docs.docker.com/build/building/multi-stage/" style="color:var(--blue)">Docker Docs: Multi-Stage Builds</a></li>
+        <li><a href="https://docs.docker.com/build/buildkit/" style="color:var(--blue)">Docker BuildKit Documentation</a></li>
+        <li><a href="https://github.com/GoogleContainerTools/distroless" style="color:var(--blue)">Distroless Container Images</a></li>
+        <li><a href="https://github.com/wagoodman/dive" style="color:var(--blue)">Dive: Image Layer Explorer</a></li>
+        <li><a href="https://docs.docker.com/build/cache/" style="color:var(--blue)">Docker Build Cache Guide</a></li>
+        <li><a href="https://snyk.io/blog/10-best-practices-to-containerize-nodejs-web-applications-with-docker/" style="color:var(--blue)">Snyk: Node.js Docker Best Practices</a></li>
+      </ul>
+    </div>
+  </div>
+  <div style="margin-top:.4em; text-align:center;">
+    <span class="pill amber">Multi-Stage</span>
+    <span class="pill green">BuildKit</span>
+    <span class="pill purple">Optimization</span>
+    <span class="pill blue">Images</span>
+  </div>
+  <p style="text-align:center; color:var(--muted); margin-top:.3em;">Thank you &mdash; questions?</p>
+</section>
+
+</div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.6.1/reveal.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.6.1/plugin/highlight/highlight.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.6.1/plugin/highlight/monokai.min.css">
+<script>
+Reveal.initialize({ hash:true, slideNumber:'c/t', transition:'fade', transitionSpeed:'fast', controls:true, progress:true, center:false, width:1100, height:900, margin:0.01, plugins:[RevealHighlight], highlight:{theme:'monokai'} });
+</script>
+<script>
+(function(){ var h=Reveal.getConfig().height||900; var m=Reveal.getConfig().margin||0.02; var maxH=Math.floor(h*(1-2*m))+'px'; function fixSlides(){ document.querySelectorAll('.reveal .slides>section,.reveal .slides>section>section').forEach(function(s){ s.style.display='block'; s.style.maxHeight=maxH; }); } Reveal.on('ready',fixSlides); Reveal.on('slidechanged',fixSlides); })();
+</script>
+</body></html>
